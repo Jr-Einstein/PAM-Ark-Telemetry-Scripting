@@ -1,82 +1,80 @@
-import pandas as pd # Loading pandas to handle all the heavy spreadsheet work
-import os # Using os to talk to my computer's folders
-import time # Bringing in time to see how fast my script runs
+import pandas as pd # Import pandas to handle all the spreadsheet data manipulation
+import os # Import os to manage file paths and folder scanning
+import time # Import time to keep track of the script's run duration
 
-def runMyReportMerger(inputFolder, outputFolder):
-    startTime = time.time() # Capture the exact moment we start the process
+def startCyberArkReportMerge(sourcePath, outputPath):
+    # Capture the start time so I can calculate how long this takes at the end
+    startTime = time.time()
     
-    print("Looking for report files...")
-    # I am grabbing every file that ends in .xlsx or .csv so I don't miss anything
-    allFiles = [f for f in os.listdir(inputFolder) if f.endswith(('.xlsx', '.csv'))]
+    # First, I'm scanning my reports folder for any Excel or CSV files
+    print("0% - Scanning directory for reports...")
+    allFiles = [f for f in os.listdir(sourcePath) if f.endswith(('.xlsx', '.csv'))]
     
-    # Safety check: if the folder is empty, I need to stop here
+    # If the folder is empty or doesn't have the right files, I stop the script here
     if not allFiles:
-        print("No files found!")
+        print("Error: No Excel or CSV files found.")
         return
 
-    # These are the 3 "Anchor" columns that connect all my different reports
-    keyColumns = ['SAFENUMBER', 'SAFENAME', 'SAFEURLID']
+    # These are the three core columns that link every CyberArk report together
+    matchKeys = ['SAFENUMBER', 'SAFENAME', 'SAFEURLID']
     
-    # I want to start with the 'member' file because it has the most rows (the base)
-    baseFile = next((f for f in allFiles if 'member' in f.lower()), allFiles[0])
+    # I need to pick a starting file; I'm looking for the member report because it has the most rows
+    print("10% - Locating member report for base mapping...")
+    membersFile = next((f for f in allFiles if 'member' in f.lower()), allFiles[0])
     
-    print(f"Starting with base: {baseFile}")
-    # Building the full path so Python knows exactly where the base file lives
-    pathToBase = os.path.join(inputFolder, baseFile)
-    
-    # Reading the first file - I added a check here for both CSV and Excel formats
-    if baseFile.endswith('.csv'):
-        mainDf = pd.read_csv(pathToBase)
+    # I build the full path and load the member report into my master dataset
+    print(f"25% - Reading base file: {membersFile}...")
+    filePath = os.path.join(sourcePath, membersFile)
+    if membersFile.endswith('.csv'):
+        masterData = pd.read_csv(filePath) # Load as CSV
     else:
-        mainDf = pd.read_excel(pathToBase)
+        masterData = pd.read_excel(filePath) # Load as Excel
 
-    # Now I'm looping through every OTHER file in that folder
-    for fileName in allFiles:
-        # I skip the base file because I've already loaded it above
-        if fileName == baseFile:
-            continue
-            
-        print(f"Adding data from {fileName}...")
-        # Get the location of the next file to merge
-        currentFilePath = os.path.join(inputFolder, fileName)
+    # Now I create a list of all the other files I need to merge into the master
+    otherFiles = [f for f in allFiles if f != membersFile]
+    totalFiles = len(otherFiles)
+
+    # I loop through each remaining file and attach its columns to my master data
+    for index, fileName in enumerate(otherFiles):
+        # I calculate a progress percentage to show in the console while it works
+        progress = 30 + int((index / totalFiles) * 50)
+        print(f"{progress}% - Merging data from: {fileName}...")
         
-        # Load the new file (handles csv/excel) into a temporary workspace
-        tempDf = pd.read_csv(currentFilePath) if fileName.endswith('.csv') else pd.read_excel(currentFilePath)
+        # Build path and read the current file
+        currentFilePath = os.path.join(sourcePath, fileName)
+        if fileName.endswith('.csv'):
+            currentData = pd.read_csv(currentFilePath)
+        else:
+            currentData = pd.read_excel(currentFilePath)
         
-        # This is the most important part: I am mapping the data side-by-side
-        # 'how=left' ensures I don't lose any members even if they aren't in the other sheet
-        mainDf = pd.merge(mainDf, tempDf, on=keyColumns, how='left')
+        # This 'left' merge is the key: it maps the new info to the existing members
+        # If a safe appears once in 'currentData', it replicates for every member in 'masterData'
+        masterData = pd.merge(masterData, currentData, on=matchKeys, how='left')
 
-    # If I merge multiple files, some columns might repeat - this line deletes the duplicates
-    mainDf = mainDf.loc[:, ~mainDf.columns.duplicated()]
-
-    # I want the final report to be clean, so I am putting the 3 ID columns at the very start
-    allColumns = list(mainDf.columns)
-    for k in reversed(keyColumns):
-        if k in allColumns:
-            # I'm popping the ID column out and moving it to the front of the list
-            allColumns.insert(0, allColumns.pop(allColumns.index(k)))
+    # After merging many files, I delete any duplicate columns that might have slipped in
+    print("85% - Cleaning up duplicate columns and organizing layout...")
+    masterData = masterData.loc[:, ~masterData.columns.duplicated()]
     
-    # Re-ordering the entire spreadsheet based on my new column list
-    mainDf = mainDf[allColumns]
+    # I'm moving my three primary ID columns to the very front so the report is easy to read
+    cols = list(masterData.columns)
+    for key in reversed(matchKeys):
+        if key in cols:
+            # Pop the column out and re-insert it at index 0
+            cols.insert(0, cols.pop(cols.index(key)))
+    masterData = masterData[cols]
 
-    print("Saving the final report...")
-    # Setting the name for the final combined master file
-    finalSavePath = os.path.join(outputFolder, 'CyberArkFinalReport.xlsx')
-    # Converting my digital data into an actual Excel file on my drive
-    mainDf.to_excel(finalSavePath, index=False)
+    # Now I'm ready to save everything into a single master Excel sheet
+    print("95% - Almost finished! Writing final Excel file...")
+    finalPath = os.path.join(outputPath, 'CyberArk_Combined_Master_Report.xlsx')
+    masterData.to_excel(finalPath, index=False) # Exporting without the index numbers
     
-    # Check the clock again to see when we finished
-    endTime = time.time()
-    # Subtracting start from end to get the total duration
-    totalTime = round(endTime - startTime, 2)
-    
-    print(f"Done! Report saved in {totalTime} seconds.")
+    # Calculate total time taken
+    totalTime = round(time.time() - startTime, 2)
+    print(f"100% - Done! Master report is ready at: {finalPath} (Process took {totalTime}s)")
 
-# Setting the source folder where my daily reports land
-myReports = r'c:\Users\n369560\Downloads\Reports'
-# Setting the destination folder where I want the final combined file
-myOutput = r'c:\Users\n369560\Downloads\CombinedReport'
+# Setting my folder paths as raw strings to handle Windows backslashes
+sourceDir = r'c:\Users\n369560\Downloads\Reports'
+outputDir = r'c:\Users\n369560\Downloads\CombinedReport'
 
-# Actually starting the script with my specific folders
-runMyReportMerger(myReports, myOutput)
+# Trigger the main function
+startCyberArkReportMerge(sourceDir, outputDir)
