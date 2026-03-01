@@ -48,7 +48,6 @@ def startCyberArkReportMerge(sourcePath, outputPath):
             currentData = pd.read_excel(currentFilePath)
         
         # This 'left' merge is the key: it maps the new info to the existing members
-        # If a safe appears once in 'currentData', it replicates for every member in 'masterData'
         masterData = pd.merge(masterData, currentData, on=matchKeys, how='left')
 
     # After merging many files, I delete any duplicate columns that might have slipped in
@@ -59,14 +58,23 @@ def startCyberArkReportMerge(sourcePath, outputPath):
     cols = list(masterData.columns)
     for key in reversed(matchKeys):
         if key in cols:
-            # Pop the column out and re-insert it at index 0
             cols.insert(0, cols.pop(cols.index(key)))
     masterData = masterData[cols]
 
-    # Now I'm ready to save everything into a single master Excel sheet
-    print("95% - Almost finished! Writing final Excel file...")
-    finalPath = os.path.join(outputPath, 'CyberArk_Combined_Master_Report.xlsx')
-    masterData.to_excel(finalPath, index=False) # Exporting without the index numbers
+    # --- NEW LOGIC: HANDLING DUPLICATE FILENAMES ---
+    print("95% - Checking for existing files and saving...")
+    baseName = "CyberArk_Combined_Master_Report"
+    extension = ".xlsx"
+    finalPath = os.path.join(outputPath, f"{baseName}{extension}")
+    
+    counter = 1
+    # If the file already exists, I keep adding (1), (2), etc. until I find a new name
+    while os.path.exists(finalPath):
+        finalPath = os.path.join(outputPath, f"{baseName}({counter}){extension}")
+        counter += 1
+    # -----------------------------------------------
+
+    masterData.to_excel(finalPath, index=False) # Exporting the final data
     
     # Calculate total time taken
     totalTime = round(time.time() - startTime, 2)
