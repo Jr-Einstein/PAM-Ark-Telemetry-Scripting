@@ -1,0 +1,38 @@
+import streamlit as st
+from pymongo import MongoClient
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Set up the Streamlit Page Layout
+st.set_page_config(page_title="IAM TCO Calculator", layout="wide")
+
+# Connect to MongoDB
+@st.cache_resource
+def init_connection():
+    uri = os.getenv("MONGODB_URL", "mongodb+srv://AmanSingh:amantcocalculator@calculator.7pbqpsm.mongodb.net/?appName = Calculator")
+    client = MongoClient(uri)
+    return client
+
+try:
+    client = init_connection()
+    db = client['tco-calculator']
+    scenarios_collection = db['scenarios']
+    st.sidebar.success("✅ MongoDB successfully connected")
+except Exception as e:
+    st.sidebar.error(f"❌ Database connection failed: {e}")
+
+# The App Header
+st.title("IAM Total Cost of Ownership Calculator")
+st.markdown("---")
+
+# Session State for User (The Collaboration Feature)
+if 'author_name' not in st.session_state:
+    st.session_state['author_name'] = ''
+
+st.session_state['author_name'] = st.text_input("Enter your name to start your session:", st.session_state['author_name'])
+
+if st.session_state['author_name']:
+    st.write(f"Welcome to the workspace, **{st.session_state['author_name']}**.")
